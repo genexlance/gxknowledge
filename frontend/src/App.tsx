@@ -28,6 +28,8 @@ function App() {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerTitle, setViewerTitle] = useState<string>('')
   const [viewerHtml, setViewerHtml] = useState<string>('')
+  const [viewerSrcDoc, setViewerSrcDoc] = useState<string>('')
+  const modalHtmlRef = useRef<HTMLDivElement | null>(null)
   const viewerTypingIntervalRef = useRef<any>(null)
   const viewerPendingHtmlRef = useRef<string | null>(null)
   // const viewerBlocksRef = useRef<string[]>([])
@@ -128,6 +130,7 @@ function App() {
     setViewerTitle(title || '')
     setViewerOpen(true)
     setViewerHtml('')
+    setViewerSrcDoc('')
     try {
       // Prefer proxy if we have a canonical URL so we preserve full formatting and assets
       if (url) {
@@ -135,8 +138,8 @@ function App() {
           const res2 = await fetch('/api/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
           const json2 = await res2.json()
           if (json2?.success && json2?.data?.html) {
-            const main2 = extractMainContent(json2.data.html)
-            setViewerHtml(main2)
+            // Render full page inside iframe via srcdoc to preserve original formatting and styles
+            setViewerSrcDoc(String(json2.data.html))
             return
           }
         } catch (e2) {
@@ -185,12 +188,34 @@ function App() {
     setViewerOpen(false)
     setViewerTitle('')
     setViewerHtml('')
+    setViewerSrcDoc('')
     viewerPendingHtmlRef.current = null
     if (viewerTypingIntervalRef.current) {
       clearInterval(viewerTypingIntervalRef.current)
       viewerTypingIntervalRef.current = null
     }
   }
+
+  // Intercept clicks on links in rendered HTML mode to open inside the modal
+  useEffect(() => {
+    if (!viewerOpen || !viewerHtml) return
+    const root = modalHtmlRef.current
+    if (!root) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      const anchor = target.closest && (target.closest('a') as HTMLAnchorElement | null)
+      if (!anchor) return
+      const href = anchor.getAttribute('href') || ''
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return
+      e.preventDefault()
+      openViewerFromSource({ url: href })
+    }
+    root.addEventListener('click', handleClick)
+    return () => {
+      root.removeEventListener('click', handleClick)
+    }
+  }, [viewerOpen, viewerHtml])
 
   return (
     <>
@@ -272,8 +297,10 @@ function App() {
             </div>
           </div>
           <div className="modal-body">
-            {viewerHtml ? (
-              <div className="modal-html" dangerouslySetInnerHTML={{ __html: viewerHtml }} />
+            {viewerSrcDoc ? (
+              <iframe className="modal-iframe" srcDoc={viewerSrcDoc} sandbox="allow-same-origin allow-popups allow-forms allow-pointer-lock allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation" />
+            ) : viewerHtml ? (
+              <div ref={modalHtmlRef} className="modal-html" dangerouslySetInnerHTML={{ __html: viewerHtml }} />
             ) : (
               <div style={{ padding: 12, color: 'var(--text-secondary)' }}>Retrieving Data…</div>
             )}

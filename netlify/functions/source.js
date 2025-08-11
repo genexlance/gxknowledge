@@ -84,7 +84,8 @@ async function tryLoadFromPinecone({ parentId, slug }) {
       ...(parentId ? { parentId: { $eq: String(parentId) } } : {}),
       ...(slug ? { slug: { $eq: String(slug) } } : {}),
     }
-    const matches = await queryVector({ values: zero, topK: 200, filter })
+    // Use a high topK with a neutral vector to retrieve as many chunks as possible for the parent
+    const matches = await queryVector({ values: zero, topK: 1000, filter })
     if (!matches || matches.length === 0) return null
     const pid = parentId || matches[0]?.metadata?.parentId
     const group = matches.filter(m => (m.metadata?.parentId || pid) === pid)

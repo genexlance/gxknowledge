@@ -10,6 +10,7 @@
 - [x] Implement vector search in chat function (queries Pinecone)
 - [x] Source links open a modal and load full content via proxy (with <base> tag for relative URLs)
 - [x] Improve search relevance and conversational answers (hybrid re-ranking, explain source relevance)
+- [x] Fix modal link rendering: preserve full formatting via iframe for proxied pages; intercept links in HTML mode; ensure complete article content
 - [ ] Admin panel scaffold (auth, routes)
 - [ ] Deploy preview on Netlify
 
