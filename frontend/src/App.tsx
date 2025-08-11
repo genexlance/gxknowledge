@@ -199,7 +199,7 @@ function App() {
         blocks.push(el.outerHTML)
       } else if (node.textContent) {
         const txt = String(node.textContent).trim()
-        if (txt) blocks.push(`<span>${escapeHtmlInline(txt)}</span>`)
+        if (txt) blocks.push(`<p>${escapeHtmlInline(txt)}</p>`)
       }
     })
     return blocks
