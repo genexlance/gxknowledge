@@ -25,7 +25,6 @@ function App() {
   const sourceIntervalsRef = useRef<Record<string, any>>({})
   const [sourceRevealCount, setSourceRevealCount] = useState<Record<string, number>>({})
   const [viewerOpen, setViewerOpen] = useState(false)
-  const [viewerUrl, setViewerUrl] = useState<string>('')
   const [viewerTitle, setViewerTitle] = useState<string>('')
   const [viewerHtml, setViewerHtml] = useState<string>('')
   const [viewerIsTyping, setViewerIsTyping] = useState<boolean>(false)
@@ -124,7 +123,6 @@ function App() {
   async function openViewerFromSource(source?: { url?: string; title?: string; parentId?: string; slug?: string }) {
     if (!source) return
     const { url, title, parentId, slug } = source
-    setViewerUrl(url || '')
     setViewerTitle(title || '')
     setViewerOpen(true)
     setViewerHtml('')
@@ -195,7 +193,6 @@ function App() {
 
   function closeViewer() {
     setViewerOpen(false)
-    setViewerUrl('')
     setViewerTitle('')
     setViewerHtml('')
     setViewerIsTyping(false)
