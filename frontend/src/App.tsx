@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 const TYPING_INTERVAL_MS = 8
 const TYPING_CHARS_PER_TICK = 4
 const SOURCE_REVEAL_INTERVAL_MS = 70
+const VIEWER_REVEAL_INTERVAL_MS = 15
 import type { KeyboardEvent } from 'react'
 
 type Message = {
@@ -28,9 +29,11 @@ function App() {
   const [viewerTitle, setViewerTitle] = useState<string>('')
   const [viewerHtml, setViewerHtml] = useState<string>('')
   const [viewerIsTyping, setViewerIsTyping] = useState<boolean>(false)
-  const [viewerTypedText, setViewerTypedText] = useState<string>('')
+  const [viewerPartialHtml, setViewerPartialHtml] = useState<string>('')
   const viewerTypingIntervalRef = useRef<any>(null)
   const viewerPendingHtmlRef = useRef<string | null>(null)
+  const viewerBlocksRef = useRef<string[]>([])
+  const viewerBlockIndexRef = useRef<number>(0)
 
   const canSend = useMemo(() => input.trim().length > 0 && !loading, [input, loading])
 
@@ -161,34 +164,48 @@ function App() {
     }
     viewerPendingHtmlRef.current = fullHtml
     setViewerIsTyping(true)
-    setViewerTypedText('')
-    const textOnly = extractTextFromHtml(fullHtml)
-    const maxChars = Math.min(textOnly.length, 6000)
-    let index = 0
+    setViewerPartialHtml('')
+    const blocks = extractBlocksFromHtml(fullHtml)
+    viewerBlocksRef.current = blocks
+    viewerBlockIndexRef.current = 0
     viewerTypingIntervalRef.current = setInterval(() => {
-      index += TYPING_CHARS_PER_TICK
-      const next = textOnly.slice(0, index)
-      setViewerTypedText(next)
-      if (index >= maxChars) {
+      const idx = viewerBlockIndexRef.current
+      const total = viewerBlocksRef.current.length
+      if (idx >= total) {
         clearInterval(viewerTypingIntervalRef.current)
         viewerTypingIntervalRef.current = null
         setViewerIsTyping(false)
         const pending = viewerPendingHtmlRef.current || ''
         setViewerHtml(pending)
         viewerPendingHtmlRef.current = null
+        return
       }
-    }, TYPING_INTERVAL_MS)
+      const nextIdx = idx + 1
+      viewerBlockIndexRef.current = nextIdx
+      const partial = viewerBlocksRef.current.slice(0, nextIdx).join('')
+      setViewerPartialHtml(`<article>${partial}</article>`)
+    }, VIEWER_REVEAL_INTERVAL_MS)
   }
-
-  function extractTextFromHtml(html: string): string {
-    try {
-      const el = document.createElement('div')
-      el.innerHTML = html
-      const text = el.textContent || (el as any).innerText || ''
-      return String(text).replace(/\s+/g, ' ').trim()
-    } catch {
-      return String(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-    }
+  function extractBlocksFromHtml(html: string): string[] {
+    const safe = String(html).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    const container = document.createElement('div')
+    container.innerHTML = safe
+    const article = container.querySelector('article') as HTMLElement | null
+    const root = article || container
+    const blocks: string[] = []
+    root.childNodes.forEach((node) => {
+      const el = node as any
+      if (el && typeof el.outerHTML === 'string') {
+        blocks.push(el.outerHTML)
+      } else if (node.textContent) {
+        const txt = String(node.textContent).trim()
+        if (txt) blocks.push(`<span>${escapeHtmlInline(txt)}</span>`)
+      }
+    })
+    return blocks
+  }
+  function escapeHtmlInline(text: string): string {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   }
 
   function closeViewer() {
@@ -196,7 +213,7 @@ function App() {
     setViewerTitle('')
     setViewerHtml('')
     setViewerIsTyping(false)
-    setViewerTypedText('')
+    setViewerPartialHtml('')
     viewerPendingHtmlRef.current = null
     if (viewerTypingIntervalRef.current) {
       clearInterval(viewerTypingIntervalRef.current)
@@ -285,10 +302,7 @@ function App() {
           </div>
           <div className="modal-body">
             {viewerIsTyping ? (
-              <div className="body-regular" style={{ whiteSpace: 'pre-wrap' }}>
-                {viewerTypedText}
-                <span className="typing-caret" />
-              </div>
+              <div className="modal-html" dangerouslySetInnerHTML={{ __html: viewerPartialHtml }} />
             ) : viewerHtml ? (
               <div className="modal-html" dangerouslySetInnerHTML={{ __html: viewerHtml }} />
             ) : (
