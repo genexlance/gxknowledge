@@ -1,0 +1,13 @@
+{
+  "name": "genex-knowledge-garden-root",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "@pinecone-database/pinecone": "^2.2.2",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "xml2js": "^0.6.2"
+  }
+}
+
+
