@@ -23,7 +23,7 @@
 - [x] Dynamic `topK` and score thresholds based on query length/complexity
 - [x] Query expansion (synonyms and tag/category boosts) before retrieval
 - [x] Optional LLM rewrite of the query for retrieval only (keep original for display)
-- [ ] Add learned field weights (title/slug/category/tags/content) via config
+- [x] Add learned field weights (title/slug/category/tags/content) via config
 - [x] Plug-in reranker hook (provider-agnostic) on the top 30 candidates
 - [x] Short-term cache for query embeddings to reduce latency/cost
 - [x] Telemetry hook to log retrieval diagnostics

@@ -72,12 +72,17 @@ exports.handler = async (event) => {
       const coverageRatio = queryTerms.length > 0 ? (coverageCount / queryTerms.length) : 0
       const normalizedLex = (lexicalScoreByParent.get(meta.parentId) || 0) / maxLexicalScore
       const phraseHit = phrase.length >= 3 && (haystack.includes(phrase) ? 1 : 0)
-      // weights tuned for balance: vector 0.6, coverage 0.25, lexical 0.12, phrase 0.08
+      // weights tuned for balance (configurable via env):
+      // vector W_VEC, coverage W_COV, lexical W_LEX, phrase W_PHRASE
+      const W_VEC = Number(process.env.HYBRID_WEIGHT_VECTOR || 0.6)
+      const W_COV = Number(process.env.HYBRID_WEIGHT_COVERAGE || 0.25)
+      const W_LEX = Number(process.env.HYBRID_WEIGHT_LEXICAL || 0.12)
+      const W_PHRASE = Number(process.env.HYBRID_WEIGHT_PHRASE || 0.08)
       const combined = (
-        (m.score || 0) * 0.6 +
-        coverageRatio * 0.25 +
-        normalizedLex * 0.12 +
-        phraseHit * 0.08
+        (m.score || 0) * W_VEC +
+        coverageRatio * W_COV +
+        normalizedLex * W_LEX +
+        phraseHit * W_PHRASE
       )
       // small bonus if the parent was shortlisted lexically
       const shortlistBonus = candidateParentIds.includes(meta.parentId) ? 0.03 : 0

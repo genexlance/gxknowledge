@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const { parseStringPromise } = require('xml2js')
+const { getFieldWeights } = require('./weights.js')
 
 let cached = {
   loadedAt: 0,
@@ -95,26 +96,30 @@ async function searchLexical(query, limit = 50) {
   const scores = []
   for (const d of docs) {
     let score = 0
+    const w = getFieldWeights()
     const titleLower = d.title.toLowerCase()
     const slugLower = d.slug.toLowerCase()
     const catsLower = d.categorySlugs.join(' ').toLowerCase()
     const tagsLower = d.tagSlugs.join(' ').toLowerCase()
     const contentLower = d.content.toLowerCase()
     for (const t of terms) {
-      const wTitle = titleLower.includes(t) ? 5 : 0
-      const wSlug = slugLower.includes(t) ? 4 : 0
-      const wCats = catsLower.includes(t) ? 3 : 0
-      const wTags = tagsLower.includes(t) ? 3 : 0
-      const wContent = contentLower.includes(t) ? 1 : 0
+      const wTitle = titleLower.includes(t) ? w.title : 0
+      const wSlug = slugLower.includes(t) ? w.slug : 0
+      const wCats = catsLower.includes(t) ? w.category : 0
+      const wTags = tagsLower.includes(t) ? w.tags : 0
+      const wContent = contentLower.includes(t) ? w.content : 0
       const weight = wTitle + wSlug + wCats + wTags + wContent
       if (weight > 0) {
         score += weight * idf(t, N, df)
       }
     }
     if (phrase.length >= 3) {
-      if (titleLower.includes(phrase)) score += 10
-      else if (slugLower.includes(phrase)) score += 8
-      else if (contentLower.includes(phrase)) score += 3
+      const phraseTitleBoost = Number(process.env.PHRASE_BOOST_TITLE || 10)
+      const phraseSlugBoost = Number(process.env.PHRASE_BOOST_SLUG || 8)
+      const phraseContentBoost = Number(process.env.PHRASE_BOOST_CONTENT || 3)
+      if (titleLower.includes(phrase)) score += phraseTitleBoost
+      else if (slugLower.includes(phrase)) score += phraseSlugBoost
+      else if (contentLower.includes(phrase)) score += phraseContentBoost
     }
     if (score > 0) {
       scores.push({ parentId: d.id, slug: d.slug, title: d.title, score })
