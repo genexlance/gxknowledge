@@ -273,7 +273,7 @@ function App() {
         ))}
         {messages.length === 0 && (
           <div className="ai-response">
-            <div className="body-regular">Hi! Ask me Anything...</div>
+            <div className="body-regular">🙋‍♂️ Hi! What would you like to know?</div>
           </div>
         )}
       </div>

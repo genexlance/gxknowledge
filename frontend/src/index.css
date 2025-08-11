@@ -60,6 +60,19 @@ html::after {
 .h2 { font-weight: 600; font-size: 2.5rem; line-height: 1.2; }
 .h1 strong{ font-weight: 300; font-size: 0.8em; }
 .h2 strong{ font-weight: 300; font-size: 0.8em; }
+@media (max-width: 600px) {
+  .h1 {
+    font-size: 2.2rem;  /* smaller-ass heading for mobile */
+    line-height: 1.15;
+  }
+  .h2 {
+    font-size: 1.8rem;  /* smaller-ass subheading for mobile */
+    line-height: 1.25;
+  }
+}
+
+
+
 .body-regular { font-weight: 300; font-size: 1rem; line-height: 1.77; }
 
 /* Chat UI */

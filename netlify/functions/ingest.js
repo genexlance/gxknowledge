@@ -76,7 +76,8 @@ exports.handler = async (event) => {
         continue
       }
 
-      const chunks = chunkText(baseText, 1200, 200)
+      // Sentence-aware chunking with overlap to improve factual coherence
+      const chunks = chunkTextSentenceAware(baseText, 1200, 3)
       const totalChunks = chunks.length
       for (let idx = 0; idx < totalChunks; idx++) {
         const chunk = chunks[idx]
@@ -155,6 +156,61 @@ function chunkText(text, maxLen, overlap) {
     if (end >= len) break
   }
   return chunks
+}
+
+// Split by sentences and build chunks up to ~maxChars, overlapping by N sentences
+function chunkTextSentenceAware(text, maxChars, overlapSentences) {
+  if (!text) return []
+  const sentences = splitIntoSentences(text)
+  const chunks = []
+  let current = ''
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i]
+    if ((current + ' ' + s).trim().length <= maxChars) {
+      current = (current ? current + ' ' : '') + s
+    } else {
+      if (current.trim()) chunks.push(current.trim())
+      // start next with overlap
+      const back = Math.max(0, i - overlapSentences)
+      const overlap = sentences.slice(back, i).join(' ')
+      current = overlap ? (overlap + ' ' + s) : s
+      if (current.length > maxChars) {
+        // fall back to hard split if a single sentence is huge
+        const hard = chunkText(current, maxChars, Math.floor(maxChars * 0.15))
+        chunks.push(...hard)
+        current = ''
+      }
+    }
+  }
+  if (current.trim()) chunks.push(current.trim())
+  return chunks
+}
+
+function splitIntoSentences(text) {
+  const normalized = String(text).replace(/\s+/g, ' ').trim()
+  if (!normalized) return []
+  // Basic sentence splitter that respects common punctuation and abbreviations
+  const abbrev = '(?:(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|e\.g|i\.e)\.)'
+  const regex = new RegExp(`(?!${abbrev})[.!?]+\s+`, 'g')
+  const parts = normalized.split(regex)
+  // Re-attach punctuation heuristically
+  const sentences = []
+  let idx = 0
+  for (const part of parts) {
+    const start = normalized.indexOf(part, idx)
+    if (start === -1) continue
+    const end = start + part.length
+    const nextChar = normalized[end] || ''
+    let punct = ''
+    if (/[.!?]/.test(nextChar)) {
+      punct = nextChar
+      idx = end + 1
+    } else {
+      idx = end
+    }
+    sentences.push((part + punct).trim())
+  }
+  return sentences.filter(Boolean)
 }
 
 

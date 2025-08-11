@@ -18,7 +18,7 @@ async function upsertVector({ id, values, metadata }) {
 
 async function queryVector({ values, topK = 5, filter }) {
   const index = getIndex()
-  const res = await index.query({ topK, vector: values, includeMetadata: true, filter })
+  const res = await index.query({ topK, vector: values, includeMetadata: true, includeValues: true, filter })
   const matches = res.matches || []
   return matches.map(m => ({ id: m.id, values: m.values, metadata: m.metadata, score: m.score }))
 }

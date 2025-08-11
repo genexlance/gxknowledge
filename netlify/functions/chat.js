@@ -1,6 +1,7 @@
 const { embedText } = require('./lib/deepseek.js')
 const { queryVector } = require('./lib/pinecone.js')
 const { searchLexical } = require('./lib/lexical.js')
+const { rerank } = require('./lib/reranker.js')
 if (process.env.NETLIFY_DEV) {
   require('dotenv').config()
 }
@@ -16,14 +17,17 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: { code: "BAD_REQUEST", message: "Missing query" } }) };
     }
 
+    // 0) Query expansion (lightweight): expand with synonyms from categories/tags heuristics
+    const expanded = expandQuery(query)
+
     // 1) Lexical pre-filter: find likely parent documents
-    const lexical = await searchLexical(query, 50)
+    const lexical = await searchLexical(expanded, 50)
     const candidateParentIds = lexical.slice(0, 25).map(x => x.parentId)
     const lexicalScoreByParent = new Map(lexical.map(l => [l.parentId, l.score]))
     const maxLexicalScore = Math.max(1e-6, ...lexical.map(l => l.score))
 
     // 2) Vector search scoped to candidates when possible
-    const queryVectorValues = await embedText(query)
+    const queryVectorValues = await getCachedEmbedding(expanded)
     const filter = {
       docType: { $eq: 'chunk' },
       postType: { $ne: 'attachment' },
@@ -33,11 +37,12 @@ exports.handler = async (event) => {
       ],
       ...(candidateParentIds.length > 0 ? { parentId: { $in: candidateParentIds } } : {})
     }
-    const matchesRaw = await queryVector({ values: queryVectorValues, topK: 60, filter })
+    const topK = dynamicTopK(expanded)
+    const matchesRaw = await queryVector({ values: queryVectorValues, topK, filter })
     // Hybrid scoring: combine vector score with lexical parent score and term coverage
     const queryTerms = tokenize(query)
     const phrase = String(query).toLowerCase().trim()
-    const rescored = matchesRaw.map((m) => {
+    const rescoredBase = matchesRaw.map((m) => {
       const meta = m.metadata || {}
       const haystack = [
         (meta.title || ''),
@@ -68,9 +73,20 @@ exports.handler = async (event) => {
       }
     })
 
+    // 3) MMR diversification at chunk level to improve coverage
+    const diverse = maxMarginalRelevance({
+      queryVector: queryVectorValues,
+      candidates: rescoredBase,
+      k: 30,
+      lambda: 0.5,
+    })
+
+    // Optional: cross-encoder rerank on the top N
+    const reranked = await rerank({ query: expanded, candidates: diverse.slice(0, 30) })
+
     // Parent-level diversity: cap chunks per parent to avoid redundancy
     const byParent = new Map()
-    for (const m of rescored) {
+    for (const m of reranked) {
       const pid = m.metadata?.parentId || m.id
       if (!byParent.has(pid)) byParent.set(pid, [])
       byParent.get(pid).push(m)
@@ -79,8 +95,9 @@ exports.handler = async (event) => {
       arr.sort((a, b) => (b.score || 0) - (a.score || 0))
     }
     const flattened = [...byParent.values()].flatMap(arr => arr.slice(0, 3))
+    const threshold = dynamicThreshold(expanded)
     const matches = flattened
-      .filter(m => (m.score || 0) >= 0.28)
+      .filter(m => (m.score || 0) >= threshold)
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, 12)
     const best = matches[0]
@@ -104,6 +121,9 @@ exports.handler = async (event) => {
     })
 
     const answer = buildAnswerFromMatches(query, matches)
+
+    // telemetry (fire-and-forget)
+    logRetrieval({ query, expanded, topK, threshold, matches: matches.map(m => ({ id: m.id, score: m.score, pid: m.metadata?.parentId })) })
 
     const response = {
       answer,
@@ -227,6 +247,97 @@ function tokenize(input) {
     }
   }
   return unique
+}
+
+// Lightweight query expander using heuristic boosts for common knowledge-base terms
+function expandQuery(query) {
+  const base = String(query || '').trim()
+  if (!base) return base
+  const lower = base.toLowerCase()
+  const expansions = []
+  if (/install|setup|configure/.test(lower)) expansions.push('installation setup configuration')
+  if (/error|issue|fail|bug/.test(lower)) expansions.push('troubleshooting fix resolution')
+  if (/price|billing|subscription/.test(lower)) expansions.push('billing pricing subscription plan')
+  if (/api|endpoint|token/.test(lower)) expansions.push('API REST endpoint authentication token key')
+  const expanded = [base, ...expansions].join(' ')
+  return expanded
+}
+
+// Adjust topK based on query length/complexity
+function dynamicTopK(q) {
+  const len = tokenize(q).length
+  if (len <= 3) return 80
+  if (len <= 8) return 60
+  return 40
+}
+
+function dynamicThreshold(q) {
+  const len = tokenize(q).length
+  if (len <= 3) return 0.24
+  if (len <= 8) return 0.28
+  return 0.30
+}
+
+// Simple in-memory embedding cache for hot queries (per function instance)
+const __embedCache = new Map()
+async function getCachedEmbedding(text) {
+  const key = text.slice(0, 256)
+  const hit = __embedCache.get(key)
+  if (hit) return hit
+  const v = await embedText(text)
+  // bound cache size
+  if (__embedCache.size > 200) {
+    const firstKey = __embedCache.keys().next().value
+    if (firstKey) __embedCache.delete(firstKey)
+  }
+  __embedCache.set(key, v)
+  return v
+}
+
+// Max Marginal Relevance using cosine similarity on returned vectors
+function maxMarginalRelevance({ queryVector, candidates, k = 20, lambda = 0.5 }) {
+  const picked = []
+  const remaining = candidates.slice().sort((a, b) => (b.score || 0) - (a.score || 0))
+  while (picked.length < k && remaining.length > 0) {
+    let bestIdx = 0
+    let bestVal = -Infinity
+    for (let i = 0; i < remaining.length; i++) {
+      const c = remaining[i]
+      const simToQuery = cosineSimilarity(queryVector, c.values || [])
+      let maxSimToPicked = 0
+      for (const p of picked) {
+        const sim = cosineSimilarity(c.values || [], p.values || [])
+        if (sim > maxSimToPicked) maxSimToPicked = sim
+      }
+      const mmr = lambda * simToQuery - (1 - lambda) * maxSimToPicked
+      if (mmr > bestVal) { bestVal = mmr; bestIdx = i }
+    }
+    picked.push(remaining.splice(bestIdx, 1)[0])
+  }
+  return picked
+}
+
+function cosineSimilarity(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || b.length === 0) return 0
+  let dot = 0, na = 0, nb = 0
+  const n = Math.min(a.length, b.length)
+  for (let i = 0; i < n; i++) {
+    const x = a[i] || 0
+    const y = b[i] || 0
+    dot += x * y
+    na += x * x
+    nb += y * y
+  }
+  if (na === 0 || nb === 0) return 0
+  return dot / (Math.sqrt(na) * Math.sqrt(nb))
+}
+
+function logRetrieval(payload) {
+  try {
+    if (process.env.LOG_RETRIEVAL !== '1') return
+    // keep lightweight; logs go to function logs
+    console.log('RETRIEVAL_LOG', JSON.stringify(payload))
+  } catch (e) {}
 }
 
 
