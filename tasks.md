@@ -11,7 +11,9 @@
 - [x] Source links open a modal and load full content via proxy (with <base> tag for relative URLs)
 - [x] Improve search relevance and conversational answers (hybrid re-ranking, explain source relevance)
 - [x] Fix modal link rendering: preserve full formatting via iframe for proxied pages; intercept links in HTML mode; ensure complete article content
-- [ ] Admin panel scaffold (auth, routes)
+- [x] Admin panel scaffold (auth, routes)
+- [x] Password-protected admin endpoints (login/logout/session, upsert)
+- [x] React Router route `/admin` + basic upload form
 - [ ] Deploy preview on Netlify
 
 ## Retrieval Augmented Generation (RAG)
