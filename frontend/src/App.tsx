@@ -149,10 +149,26 @@ function App() {
       // Fallback to internal XML/Pinecone content if proxy not available
       const res = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, slug }) })
       const json = await res.json()
-      if (json?.success && json?.data?.html) {
-        const main = extractMainContent(json.data.html)
-        setViewerHtml(main)
-        return
+      if (json?.success && json?.data) {
+        const data = json.data
+        // If the server returns a canonical URL for the doc, proxy it to preserve original formatting
+        if (data.url) {
+          try {
+            const prox = await fetch('/api/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: data.url }) })
+            const proxJson = await prox.json()
+            if (proxJson?.success && proxJson?.data?.html) {
+              setViewerSrcDoc(String(proxJson.data.html))
+              return
+            }
+          } catch (_e3) {
+            // fall through to html below
+          }
+        }
+        if (data.html) {
+          const main = extractMainContent(data.html)
+          setViewerHtml(main)
+          return
+        }
       }
       // Last fallback: if we have a URL but proxy failed earlier, show a link
       if (url) {

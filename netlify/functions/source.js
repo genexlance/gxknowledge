@@ -22,13 +22,13 @@ exports.handler = async (event) => {
     // Try XML first (supports both project root and function-relative location)
     const xmlResult = await tryLoadFromXml({ parentId, slug })
     if (xmlResult) {
-      return respondHtml(xmlResult.title, xmlResult.html)
+      return respondHtml(xmlResult.title, xmlResult.html, xmlResult.url)
     }
 
     // Fallback to Pinecone assembly
     const pineResult = await tryLoadFromPinecone({ parentId, slug })
     if (pineResult) {
-      return respondHtml(pineResult.title, pineResult.html)
+      return respondHtml(pineResult.title, pineResult.html, pineResult.url)
     }
 
     return { statusCode: 404, body: JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'Document not found' } }) }
@@ -55,8 +55,8 @@ async function tryLoadFromXml({ parentId, slug }) {
     const keySlug = slug ? String(slug) : null
     const entry = (keyId && index.byId.get(keyId)) || (keySlug && index.bySlug.get(keySlug))
     if (!entry) return null
-    const { title, html } = entry
-    return { title, html }
+    const { title, html, url } = entry
+    return { title, html, url }
   } catch {
     return null
   }
@@ -128,11 +128,11 @@ function escapeHtmlBlock(text = '') {
     .replace(/>/g, '&gt;')
 }
 
-function respondHtml(title, html) {
+function respondHtml(title, html, url) {
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ success: true, data: { title, html } })
+    body: JSON.stringify({ success: true, data: { title, html, url: url || null } })
   }
 }
 
@@ -163,7 +163,7 @@ async function ensureXmlIndex() {
       const base = pageLink || siteBase
       const rewritten = rewriteRelativeUrls(html, base)
       const wrapped = `<article>${rewritten}</article>`
-      const entry = { title, html: wrapped }
+      const entry = { title, html: wrapped, url: pageLink || null }
       if (id) byId.set(String(id), entry)
       if (name) bySlug.set(String(name), entry)
     }
