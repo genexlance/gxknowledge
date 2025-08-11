@@ -1,0 +1,15 @@
+[build]
+  publish = "frontend/dist"
+  command = "npm --prefix frontend ci && npm --prefix frontend run build"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[dev]
+  command = "npm --prefix frontend run dev"
+  targetPort = 5173
+  functions = "netlify/functions"
+
