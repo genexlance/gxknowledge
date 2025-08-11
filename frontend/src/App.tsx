@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 const TYPING_INTERVAL_MS = 8
 const TYPING_CHARS_PER_TICK = 4
 const SOURCE_REVEAL_INTERVAL_MS = 70
-const VIEWER_REVEAL_INTERVAL_MS = 15
+// const VIEWER_REVEAL_INTERVAL_MS = 15
 import type { KeyboardEvent } from 'react'
 
 type Message = {
@@ -28,12 +28,10 @@ function App() {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerTitle, setViewerTitle] = useState<string>('')
   const [viewerHtml, setViewerHtml] = useState<string>('')
-  const [viewerIsTyping, setViewerIsTyping] = useState<boolean>(false)
-  const [viewerPartialHtml, setViewerPartialHtml] = useState<string>('')
   const viewerTypingIntervalRef = useRef<any>(null)
   const viewerPendingHtmlRef = useRef<string | null>(null)
-  const viewerBlocksRef = useRef<string[]>([])
-  const viewerBlockIndexRef = useRef<number>(0)
+  // const viewerBlocksRef = useRef<string[]>([])
+  // const viewerBlockIndexRef = useRef<number>(0)
 
   const canSend = useMemo(() => input.trim().length > 0 && !loading, [input, loading])
 
@@ -71,7 +69,8 @@ function App() {
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
       handleSend()
     }
   }
@@ -134,7 +133,8 @@ function App() {
       const res = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, slug }) })
       const json = await res.json()
       if (json?.success && json?.data?.html) {
-        startViewerTyping(json.data.html)
+          const main = extractMainContent(json.data.html)
+          setViewerHtml(main)
         return
       }
     } catch (e) {
@@ -145,7 +145,8 @@ function App() {
         const res2 = await fetch('/api/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
         const json2 = await res2.json()
         if (json2?.success && json2?.data?.html) {
-          startViewerTyping(json2.data.html)
+          const main2 = extractMainContent(json2.data.html)
+          setViewerHtml(main2)
         } else {
           setViewerHtml('<p style="padding:12px">Unable to load content. </p>')
         }
@@ -157,63 +158,29 @@ function App() {
     }
   }
 
-  function startViewerTyping(fullHtml: string) {
-    if (viewerTypingIntervalRef.current) {
-      clearInterval(viewerTypingIntervalRef.current)
-      viewerTypingIntervalRef.current = null
-    }
-    viewerPendingHtmlRef.current = fullHtml
-    setViewerIsTyping(true)
-    setViewerPartialHtml('')
-    const blocks = extractBlocksFromHtml(fullHtml)
-    viewerBlocksRef.current = blocks
-    viewerBlockIndexRef.current = 0
-    viewerTypingIntervalRef.current = setInterval(() => {
-      const idx = viewerBlockIndexRef.current
-      const total = viewerBlocksRef.current.length
-      if (idx >= total) {
-        clearInterval(viewerTypingIntervalRef.current)
-        viewerTypingIntervalRef.current = null
-        setViewerIsTyping(false)
-        const pending = viewerPendingHtmlRef.current || ''
-        setViewerHtml(pending)
-        viewerPendingHtmlRef.current = null
-        return
-      }
-      const nextIdx = idx + 1
-      viewerBlockIndexRef.current = nextIdx
-      const partial = viewerBlocksRef.current.slice(0, nextIdx).join('')
-      setViewerPartialHtml(`<article>${partial}</article>`)
-    }, VIEWER_REVEAL_INTERVAL_MS)
-  }
-  function extractBlocksFromHtml(html: string): string[] {
-    const safe = String(html).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  function extractMainContent(fullHtml: string): string {
+    const safe = String(fullHtml).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     const container = document.createElement('div')
     container.innerHTML = safe
     const article = container.querySelector('article') as HTMLElement | null
-    const root = article || container
-    const blocks: string[] = []
-    root.childNodes.forEach((node) => {
-      const el = node as any
-      if (el && typeof el.outerHTML === 'string') {
-        blocks.push(el.outerHTML)
-      } else if (node.textContent) {
-        const txt = String(node.textContent).trim()
-        if (txt) blocks.push(`<p>${escapeHtmlInline(txt)}</p>`)
-      }
-    })
-    return blocks
+    if (article) return article.outerHTML
+    const body = container.querySelector('body') as HTMLElement | null
+    if (body) return `<article>${body.innerHTML}</article>`
+    return `<article>${safe}</article>`
   }
-  function escapeHtmlInline(text: string): string {
-    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  }
+
+  // Typing animation removed; keep function for future use (no-op)
+  // keep for API compatibility (unused)
+  // function startViewerTyping(fullHtml: string) { setViewerHtml(extractMainContent(fullHtml)) }
+  // Block extraction no longer used
+  // function escapeHtmlInline(text: string): string {
+  //   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // }
 
   function closeViewer() {
     setViewerOpen(false)
     setViewerTitle('')
     setViewerHtml('')
-    setViewerIsTyping(false)
-    setViewerPartialHtml('')
     viewerPendingHtmlRef.current = null
     if (viewerTypingIntervalRef.current) {
       clearInterval(viewerTypingIntervalRef.current)
@@ -301,9 +268,7 @@ function App() {
             </div>
           </div>
           <div className="modal-body">
-            {viewerIsTyping ? (
-              <div className="modal-html" dangerouslySetInnerHTML={{ __html: viewerPartialHtml }} />
-            ) : viewerHtml ? (
+            {viewerHtml ? (
               <div className="modal-html" dangerouslySetInnerHTML={{ __html: viewerHtml }} />
             ) : (
               <div style={{ padding: 12, color: 'var(--text-secondary)' }}>Retrieving Data…</div>
