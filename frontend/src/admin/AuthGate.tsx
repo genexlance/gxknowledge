@@ -55,7 +55,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', marginBottom: 8 }}
         />
         {error && <div style={{ color: '#d33', marginBottom: 8 }}>{error}</div>}
-        <button type="submit" style={{ width: '100%', padding: '10px 12px', borderRadius: 6, background: 'black', color: 'white' }}>Sign in</button>
+        <button type="submit" style={{ width: '100%', padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'white' }}>Sign in</button>
       </form>
     </div>
   )

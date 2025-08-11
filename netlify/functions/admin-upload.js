@@ -36,21 +36,31 @@ exports.handler = async (event) => {
 
     const fields = {}
     const tmpFiles = []
+    const fileWrites = []
     const busboy = Busboy({ headers: { 'content-type': contentType } })
     const parsePromise = new Promise((resolve, reject) => {
       busboy.on('file', (name, file, info) => {
         const { filename } = info
         const saveTo = path.join(os.tmpdir(), `${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`)
         const writeStream = fs.createWriteStream(saveTo)
-        file.pipe(writeStream)
-        writeStream.on('close', () => {
-          tmpFiles.push({ path: saveTo, filename })
+        const writeFinished = new Promise((res, rej) => {
+          writeStream.on('finish', res)
+          writeStream.on('close', res)
+          writeStream.on('error', rej)
         })
+        file.pipe(writeStream)
+        tmpFiles.push({ path: saveTo, filename })
+        fileWrites.push(writeFinished)
       })
       busboy.on('field', (name, val) => { fields[name] = val })
       busboy.on('error', reject)
-      busboy.on('finish', resolve)
-      busboy.end(Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8'))
+      busboy.on('finish', async () => {
+        try {
+          await Promise.all(fileWrites)
+          resolve()
+        } catch (e) { reject(e) }
+      })
+      busboy.end(Buffer.from(event.body || '', event.isBase64Encoded ? 'base64' : 'utf8'))
     })
 
     await parsePromise

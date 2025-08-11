@@ -92,7 +92,7 @@ export default function AdminPage() {
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 18 }}>Admin Dashboard</div>
-        <button onClick={logout} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>Logout</button>
+        <button onClick={logout} style={{ padding: '8px 12px', borderRadius: 6,background: 'var(--lime-bright)', border: '1px solid var(--border)' }}>Logout</button>
       </div>
       <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
@@ -105,19 +105,19 @@ export default function AdminPage() {
           <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (comma-separated)" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Canonical URL (optional)" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
         </div>
-        <button type="submit" disabled={loading} style={{ padding: '10px 12px', borderRadius: 6, background: 'black', color: 'white' }}>{loading ? 'Saving…' : 'Save to KB'}</button>
+        <button type="submit" disabled={loading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'white' }}>{loading ? 'Saving…' : 'Save to KB'}</button>
       </form>
 
       <form onSubmit={handleUpload} style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
         <div style={{ fontWeight: 700 }}>Upload XML/PDF/DOCX</div>
         <input type="file" accept=".xml,.pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <button type="submit" disabled={uploading} style={{ padding: '10px 12px', borderRadius: 6, background: 'black', color: 'white' }}>{uploading ? 'Uploading…' : 'Upload & Ingest'}</button>
+        <button type="submit" disabled={uploading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'white' }}>{uploading ? 'Uploading…' : 'Upload & Ingest'}</button>
       </form>
 
       <form onSubmit={handleImportUrl} style={{ display: 'grid', gap: 8 }}>
         <div style={{ fontWeight: 700 }}>Import from URL (HTML/PDF/DOCX/XML)</div>
         <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com/page-or-file" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
-        <button type="submit" disabled={importing} style={{ padding: '10px 12px', borderRadius: 6, background: 'black', color: 'white' }}>{importing ? 'Importing…' : 'Import URL & Ingest'}</button>
+        <button type="submit" disabled={importing} style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--lime-bright)', color: 'white' }}>{importing ? 'Importing…' : 'Import URL & Ingest'}</button>
       </form>
       {status && <div style={{ marginTop: 10 }}>{status}</div>}
     </div>
