@@ -65,7 +65,11 @@ async function tryLoadFromXml({ parentId, slug }) {
     const title = (match.title?._ || match.title || '').toString()
     let html = (match['content:encoded']?._ || match['content:encoded'] || '').toString()
     html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    return { title, html: wrapArticle(title, html) }
+    const pageLink = (match.link?._ || match.link || '').toString()
+    const siteBase = (parsed?.rss?.channel?.link?._ || parsed?.rss?.channel?.link || '').toString()
+    const base = pageLink || siteBase
+    const rewritten = rewriteRelativeUrls(html, base)
+    return { title, html: `<article>${rewritten}</article>` }
   } catch {
     return null
   }
@@ -89,7 +93,7 @@ async function tryLoadFromPinecone({ parentId, slug }) {
     const htmlBody = group
       .map(m => `<p>${escapeHtmlBlock(m.metadata?.content || '')}</p>`)
       .join('\n')
-    return { title, html: wrapArticle(title, htmlBody) }
+    return { title, html: `<article>${htmlBody}</article>` }
   } catch {
     return null
   }
@@ -97,6 +101,27 @@ async function tryLoadFromPinecone({ parentId, slug }) {
 
 function wrapArticle(title, innerHtml) {
   return `<!doctype html><html><head><meta charset=\"utf-8\"><title>${escapeHtml(title)}</title></head><body><article>${innerHtml}</article></body></html>`
+}
+
+function rewriteRelativeUrls(html, base) {
+  if (!base) return html
+  let origin
+  try { origin = new URL(base) } catch { return html }
+  const replacer = (full, attr, url) => {
+    const trimmed = (url || '').trim()
+    if (!trimmed) return full
+    const lower = trimmed.toLowerCase()
+    if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:') || lower.startsWith('mailto:') || lower.startsWith('tel:') || lower.startsWith('#')) {
+      return full
+    }
+    try {
+      const abs = new URL(trimmed, origin.href).href
+      return `${attr}="${abs}"`
+    } catch {
+      return full
+    }
+  }
+  return html.replace(/\b(href|src)=["']([^"']+)["']/gi, replacer)
 }
 
 function escapeHtmlBlock(text = '') {
