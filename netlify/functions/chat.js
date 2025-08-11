@@ -2,6 +2,7 @@ const { embedText } = require('./lib/deepseek.js')
 const { queryVector } = require('./lib/pinecone.js')
 const { searchLexical } = require('./lib/lexical.js')
 const { rerank } = require('./lib/reranker.js')
+const { rewriteForRetrieval, shouldRewrite } = require('./lib/rewrite.js')
 if (process.env.NETLIFY_DEV) {
   require('dotenv').config()
 }
@@ -17,8 +18,22 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: { code: "BAD_REQUEST", message: "Missing query" } }) };
     }
 
-    // 0) Query expansion (lightweight): expand with synonyms from categories/tags heuristics
-    const expanded = expandQuery(query)
+    // 0) Optional LLM rewrite for retrieval only (keep original for display)
+    const originalQuery = String(query)
+    let retrievalQuery = originalQuery
+    if (shouldRewrite()) {
+      try {
+        const candidate = await rewriteForRetrieval({ query: originalQuery })
+        if (candidate && typeof candidate === 'string' && candidate.trim().length >= 3) {
+          retrievalQuery = candidate.trim()
+        }
+      } catch (_err) {
+        retrievalQuery = originalQuery
+      }
+    }
+
+    // 1) Query expansion (lightweight): expand with synonyms from categories/tags heuristics
+    const expanded = expandQuery(retrievalQuery)
 
     // 1) Lexical pre-filter: find likely parent documents
     const lexical = await searchLexical(expanded, 50)
@@ -40,8 +55,8 @@ exports.handler = async (event) => {
     const topK = dynamicTopK(expanded)
     const matchesRaw = await queryVector({ values: queryVectorValues, topK, filter })
     // Hybrid scoring: combine vector score with lexical parent score and term coverage
-    const queryTerms = tokenize(query)
-    const phrase = String(query).toLowerCase().trim()
+    const queryTerms = tokenize(originalQuery)
+    const phrase = String(originalQuery).toLowerCase().trim()
     const rescoredBase = matchesRaw.map((m) => {
       const meta = m.metadata || {}
       const haystack = [
@@ -120,10 +135,10 @@ exports.handler = async (event) => {
       }
     })
 
-    const answer = buildAnswerFromMatches(query, matches)
+    const answer = buildAnswerFromMatches(originalQuery, matches)
 
     // telemetry (fire-and-forget)
-    logRetrieval({ query, expanded, topK, threshold, matches: matches.map(m => ({ id: m.id, score: m.score, pid: m.metadata?.parentId })) })
+    logRetrieval({ query: originalQuery, rewritten: retrievalQuery !== originalQuery ? retrievalQuery : null, expanded, topK, threshold, matches: matches.map(m => ({ id: m.id, score: m.score, pid: m.metadata?.parentId })) })
 
     const response = {
       answer,
