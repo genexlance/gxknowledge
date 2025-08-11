@@ -1,2 +1,9 @@
 # Local Netlify folder
 .netlify
+
+# Environment files (never commit secrets)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
