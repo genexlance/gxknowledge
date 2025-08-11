@@ -60,12 +60,82 @@ html::after {
 .h2 { font-weight: 600; font-size: 2.5rem; line-height: 1.2; }
 .h1 strong{ font-weight: 300; font-size: 0.8em; }
 .h2 strong{ font-weight: 300; font-size: 0.8em; }
-.body-regular { font-weight: 300; font-size: 1rem; line-height: 1; }
+.body-regular { font-weight: 300; font-size: 1rem; line-height: 1.77; }
 
 /* Chat UI */
 .chat-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem;z-index: 7; }
-.chat-header { display: flex; align-items: center; gap: 5px; margin-bottom: 1rem; }
-.chat-logo { width: 144px; height: 144px;display:block; }
+.chat-header { display: flex; align-items: center; gap: 5px; margin-bottom: 1rem; max-width: 90%;}
+
+:root{
+  --glitch-period: 7s;    /* how often */
+  --g-str: 4px;           /* shake distance */
+  --g-tilt-1: 7deg;       /* angles per flash */
+  --g-tilt-2: -3deg;
+  --g-tilt-3: 11deg;
+}
+
+.chat-logo{
+  width:144px;
+  height:144px;
+  display:block;
+  position:relative;
+  overflow:visible;
+  will-change: transform, filter, clip-path;
+  animation: glitch3 var(--glitch-period) steps(1,end) infinite;
+}
+
+@keyframes glitch3{
+  /* chill */
+  0%,80%,
+  82.6%,83.6%,
+  84.2%,85.2%,
+  85.8%,100%{
+    transform:none;
+    filter:none;
+    clip-path: inset(0);
+  }
+
+  /* flash 1 */
+  82%{
+    transform: translate(var(--g-str), calc(var(--g-str) * -1))
+               skewX(var(--g-tilt-1));
+    filter:
+      contrast(1.25) saturate(1.1)
+      drop-shadow(-2px 0 rgba(255,0,0,.65))
+      drop-shadow( 2px 0 rgba(0,255,255,.65));
+    clip-path: inset(0 0 58% 0); /* slice top */
+  }
+
+  /* flash 2 */
+  83.2%{
+    transform: translate(calc(var(--g-str) * -1), 1px)
+               skewY(var(--g-tilt-2));
+    filter:
+      contrast(1.3)
+      drop-shadow( 2px 0 rgba(255,0,0,.65))
+      drop-shadow(-2px 0 rgba(0,255,255,.65));
+    clip-path: inset(42% 0 0 0);  /* slice bottom */
+  }
+
+  /* flash 3 */
+  84.8%{
+    transform: translate(1px,0) rotate(0.6deg)
+               skewX(var(--g-tilt-4));
+    filter:
+      contrast(1.35)
+      drop-shadow(-1px 0 rgba(255,0,0,.6))
+      drop-shadow( 1px 0 rgba(0,255,255,.6));
+    clip-path: inset(10% 0 10% 0); /* thin strip */
+  }
+}
+
+/* Motion safety */
+@media (prefers-reduced-motion: reduce){
+  .chat-logo{ animation:none; }
+}
+
+
+
 .messages { display: flex; flex-direction: column; gap: 12px; padding: 1rem; min-height: 10vh; z-index: 7;}
 .ai-response {
   border-left: 3px solid #525252;
@@ -73,6 +143,7 @@ html::after {
   border-radius: 8px;
   position: relative;
   padding:33px;
+  line-height:1.44;
 }
 
 .ai-response::before {
@@ -111,7 +182,7 @@ html::after {
 }
 .ai-response .title, .ai-response strong { font-weight: 900; font-size: 1.1rem; }
 .ai-response a { color: var(--lime-light); text-decoration: underline; }
-.typing-caret { display: inline-block; width: 10px; background: var(--lime-primary); height: 1em; margin-left: 2px; animation: blink 1s step-start infinite; z-index: 7;}
+.typing-caret { display: inline-block; width: 10px; background: var(--lime-primary); height: 1em; margin-left: 2px; animation: blink 1s step-start infinite; z-index: 7;line-height:1.44;}
 @keyframes blink { 50% { opacity: 0; } }
 
 /* Modal */

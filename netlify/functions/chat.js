@@ -19,6 +19,8 @@ exports.handler = async (event) => {
     // 1) Lexical pre-filter: find likely parent documents
     const lexical = await searchLexical(query, 50)
     const candidateParentIds = lexical.slice(0, 25).map(x => x.parentId)
+    const lexicalScoreByParent = new Map(lexical.map(l => [l.parentId, l.score]))
+    const maxLexicalScore = Math.max(1e-6, ...lexical.map(l => l.score))
 
     // 2) Vector search scoped to candidates when possible
     const queryVectorValues = await embedText(query)
@@ -31,28 +33,56 @@ exports.handler = async (event) => {
       ],
       ...(candidateParentIds.length > 0 ? { parentId: { $in: candidateParentIds } } : {})
     }
-    const matchesRaw = await queryVector({ values: queryVectorValues, topK: 50, filter })
-    // Keyword boost: if metadata contains explicit keywords/tags that match the query terms, increase score
+    const matchesRaw = await queryVector({ values: queryVectorValues, topK: 60, filter })
+    // Hybrid scoring: combine vector score with lexical parent score and term coverage
     const queryTerms = tokenize(query)
-    const boosted = matchesRaw.map(m => {
+    const phrase = String(query).toLowerCase().trim()
+    const rescored = matchesRaw.map((m) => {
       const meta = m.metadata || {}
       const haystack = [
-        (meta.title||''),
-        (meta.category||''),
-        ...((meta.tags||[])),
-        ...((meta.categorySlugs||[])),
-        ...((meta.tagSlugs||[])),
-        (meta.slug||''),
-        (meta.content||'')
+        (meta.title || ''),
+        (meta.category || ''),
+        ...((meta.tags || [])),
+        ...((meta.categorySlugs || [])),
+        ...((meta.tagSlugs || [])),
+        (meta.slug || ''),
+        (meta.content || '')
       ].join(' ').toLowerCase()
-      const hits = queryTerms.reduce((acc, t) => acc + (haystack.includes(t) ? 1 : 0), 0)
-      // up to +0.3 for multiple keyword hits; add extra if lexical shortlisted
-      const bonusKeyword = Math.min(0.3, hits * 0.06)
-      const isLexicalHit = candidateParentIds.includes(meta.parentId)
-      const bonusLexical = isLexicalHit ? 0.15 : 0
-      return { ...m, score: Math.min(1, (m.score || 0) + bonusKeyword + bonusLexical) }
+      const coverageCount = queryTerms.reduce((acc, t) => acc + (haystack.includes(t) ? 1 : 0), 0)
+      const coverageRatio = queryTerms.length > 0 ? (coverageCount / queryTerms.length) : 0
+      const normalizedLex = (lexicalScoreByParent.get(meta.parentId) || 0) / maxLexicalScore
+      const phraseHit = phrase.length >= 3 && (haystack.includes(phrase) ? 1 : 0)
+      // weights tuned for balance: vector 0.6, coverage 0.25, lexical 0.12, phrase 0.08
+      const combined = (
+        (m.score || 0) * 0.6 +
+        coverageRatio * 0.25 +
+        normalizedLex * 0.12 +
+        phraseHit * 0.08
+      )
+      // small bonus if the parent was shortlisted lexically
+      const shortlistBonus = candidateParentIds.includes(meta.parentId) ? 0.03 : 0
+      return {
+        ...m,
+        score: Math.max(0, Math.min(1, combined + shortlistBonus)),
+        _coverageRatio: coverageRatio
+      }
     })
-    const matches = boosted.filter(m => (m.score || 0) >= 0.32).sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 12)
+
+    // Parent-level diversity: cap chunks per parent to avoid redundancy
+    const byParent = new Map()
+    for (const m of rescored) {
+      const pid = m.metadata?.parentId || m.id
+      if (!byParent.has(pid)) byParent.set(pid, [])
+      byParent.get(pid).push(m)
+    }
+    for (const arr of byParent.values()) {
+      arr.sort((a, b) => (b.score || 0) - (a.score || 0))
+    }
+    const flattened = [...byParent.values()].flatMap(arr => arr.slice(0, 3))
+    const matches = flattened
+      .filter(m => (m.score || 0) >= 0.28)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 12)
     const best = matches[0]
     const relevance = best ? Math.max(0, Math.min(1, best.score)) : 0
     const fallbackBase = (process.env.FALLBACK_SOURCE_BASE_URL || '').replace(/\/$/, '')
@@ -124,38 +154,58 @@ function serializeError(err) {
 
 function buildAnswerFromMatches(query, matches) {
   if (!matches || matches.length === 0) {
-    return `I couldn't find anything relevant for: ${query}`
+    return `Here’s what I looked for in your question — "${query}" — but I couldn’t find anything reliable in the knowledge base. Try rephrasing or asking about a related concept.`
   }
-  // Extractive answer: summarize top chunks grouped by parent, then list sources
-  const lines = []
+
   const byParent = new Map()
   for (const m of matches) {
     const pid = m.metadata?.parentId || m.id
     if (!byParent.has(pid)) byParent.set(pid, [])
     byParent.get(pid).push(m)
   }
-  const groups = [...byParent.values()].sort((a,b)=> (b[0].score||0) - (a[0].score||0))
-  const topGroup = groups[0]
-  if (topGroup) {
-    const top = topGroup[0]
-    const title = top.metadata?.title || 'Untitled'
-    const category = top.metadata?.category || ''
-    const snippet = topGroup.map(g => (g.metadata?.content || '')).join(' ').slice(0, 500)
-    lines.push(`${title}${category ? ` — ${category}` : ''}`)
-    lines.push(snippet + (snippet.length === 500 ? '…' : ''))
+  const groups = [...byParent.values()].sort((a, b) => (b[0].score || 0) - (a[0].score || 0))
+  const topGroups = groups.slice(0, 3)
+
+  // Title line (the UI bolds the first line)
+  const lines = []
+  lines.push(`Here’s how our sources address "${query}" and why they’re relevant:`)
+
+  // Brief synthesis from the most relevant group
+  const primary = topGroups[0]
+  if (primary) {
+    const joined = primary.map(g => (g.metadata?.content || '')).join(' ')
+    const synthesis = joined.slice(0, 480)
+    const title = primary[0]?.metadata?.title || 'Top source'
+    lines.push(`${title}: ${synthesis}${synthesis.length === 480 ? '…' : ''}`)
   }
 
-  // Additional supporting sources
-  const others = groups.slice(1, 3)
-  if (others.length > 0) {
-    lines.push('\nRelated sources:')
-    for (const group of others) {
-      const top = group[0]
-      const title = top.metadata?.title || 'Untitled'
-      const score = typeof top.score === 'number' ? (top.score * 100).toFixed(0) : '—'
-      lines.push(`- ${title} (relevance ${score}%)`)
+  // Explain relevance of each top source
+  if (topGroups.length > 0) {
+    lines.push('\nWhy these sources are relevant:')
+    let idx = 1
+    for (const grp of topGroups) {
+      const top = grp[0]
+      const meta = top?.metadata || {}
+      const haystack = [
+        (meta.title || ''),
+        (meta.category || ''),
+        ...((meta.tags || [])),
+        ...((meta.categorySlugs || [])),
+        ...((meta.tagSlugs || [])),
+        (meta.slug || ''),
+        (meta.content || '')
+      ].join(' ').toLowerCase()
+      const qTerms = tokenize(query)
+      const overlaps = qTerms.filter(t => haystack.includes(t)).slice(0, 6)
+      const overlapText = overlaps.length > 0 ? `mentions ${overlaps.map(t => `“${t}”`).join(', ')}` : 'covers closely related topics'
+      const scorePct = typeof top.score === 'number' ? ` — relevance ${(top.score * 100).toFixed(0)}%` : ''
+      const title = meta.title || `Source ${idx}`
+      lines.push(`- ${title}${scorePct}: this source ${overlapText} that align with your question.`)
+      idx += 1
     }
   }
+
+  lines.push('\nSee Sources below for links to the documents.')
   return lines.join('\n')
 }
 
