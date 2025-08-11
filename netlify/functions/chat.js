@@ -1,5 +1,6 @@
 const { embedText } = require('./lib/deepseek.js')
 const { queryVector } = require('./lib/pinecone.js')
+const { searchLexical } = require('./lib/lexical.js')
 if (process.env.NETLIFY_DEV) {
   require('dotenv').config()
 }
@@ -15,19 +16,22 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: { code: "BAD_REQUEST", message: "Missing query" } }) };
     }
 
-    // Placeholder vector search flow
+    // 1) Lexical pre-filter: find likely parent documents
+    const lexical = await searchLexical(query, 50)
+    const candidateParentIds = lexical.slice(0, 25).map(x => x.parentId)
+
+    // 2) Vector search scoped to candidates when possible
     const queryVectorValues = await embedText(query)
-    // Filter out attachments/orders by category/tag slugs if present
     const filter = {
       docType: { $eq: 'chunk' },
       postType: { $ne: 'attachment' },
       $or: [
         { isKB: { $eq: true } },
         { categorySlugs: { $in: ['kb','knowledge-base'] } }
-      ]
+      ],
+      ...(candidateParentIds.length > 0 ? { parentId: { $in: candidateParentIds } } : {})
     }
-    // Add a score threshold client-side to reduce noise
-    const matchesRaw = await queryVector({ values: queryVectorValues, topK: 20, filter })
+    const matchesRaw = await queryVector({ values: queryVectorValues, topK: 50, filter })
     // Keyword boost: if metadata contains explicit keywords/tags that match the query terms, increase score
     const queryTerms = tokenize(query)
     const boosted = matchesRaw.map(m => {
@@ -42,11 +46,13 @@ exports.handler = async (event) => {
         (meta.content||'')
       ].join(' ').toLowerCase()
       const hits = queryTerms.reduce((acc, t) => acc + (haystack.includes(t) ? 1 : 0), 0)
-      // up to +0.2 for multiple keyword hits
-      const bonus = Math.min(0.2, hits * 0.05)
-      return { ...m, score: Math.min(1, (m.score || 0) + bonus) }
+      // up to +0.3 for multiple keyword hits; add extra if lexical shortlisted
+      const bonusKeyword = Math.min(0.3, hits * 0.06)
+      const isLexicalHit = candidateParentIds.includes(meta.parentId)
+      const bonusLexical = isLexicalHit ? 0.15 : 0
+      return { ...m, score: Math.min(1, (m.score || 0) + bonusKeyword + bonusLexical) }
     })
-    const matches = boosted.filter(m => (m.score || 0) >= 0.35).sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 10)
+    const matches = boosted.filter(m => (m.score || 0) >= 0.32).sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 12)
     const best = matches[0]
     const relevance = best ? Math.max(0, Math.min(1, best.score)) : 0
     const fallbackBase = (process.env.FALLBACK_SOURCE_BASE_URL || '').replace(/\/$/, '')
