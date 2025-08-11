@@ -105,19 +105,19 @@ export default function AdminPage() {
           <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (comma-separated)" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Canonical URL (optional)" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
         </div>
-        <button type="submit" disabled={loading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'white' }}>{loading ? 'Saving…' : 'Save to KB'}</button>
+        <button type="submit" disabled={loading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'black' }}>{loading ? 'Saving…' : 'Save to KB'}</button>
       </form>
 
       <form onSubmit={handleUpload} style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
         <div style={{ fontWeight: 700 }}>Upload XML/PDF/DOCX</div>
         <input type="file" accept=".xml,.pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <button type="submit" disabled={uploading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'white' }}>{uploading ? 'Uploading…' : 'Upload & Ingest'}</button>
+        <button type="submit" disabled={uploading} style={{ padding: '10px 12px', borderRadius: 6, background: 'var(--lime-bright)', color: 'black' }}>{uploading ? 'Uploading…' : 'Upload & Ingest'}</button>
       </form>
 
       <form onSubmit={handleImportUrl} style={{ display: 'grid', gap: 8 }}>
         <div style={{ fontWeight: 700 }}>Import from URL (HTML/PDF/DOCX/XML)</div>
         <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com/page-or-file" style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }} />
-        <button type="submit" disabled={importing} style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--lime-bright)', color: 'white' }}>{importing ? 'Importing…' : 'Import URL & Ingest'}</button>
+        <button type="submit" disabled={importing} style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--lime-bright)', color: 'black' }}>{importing ? 'Importing…' : 'Import URL & Ingest'}</button>
       </form>
       {status && <div style={{ marginTop: 10 }}>{status}</div>}
     </div>
