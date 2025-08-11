@@ -129,32 +129,36 @@ function App() {
     setViewerOpen(true)
     setViewerHtml('')
     try {
-      // Prefer internal content fetch; if it fails, fallback to proxy URL if present
+      // Prefer proxy if we have a canonical URL so we preserve full formatting and assets
+      if (url) {
+        try {
+          const res2 = await fetch('/api/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+          const json2 = await res2.json()
+          if (json2?.success && json2?.data?.html) {
+            const main2 = extractMainContent(json2.data.html)
+            setViewerHtml(main2)
+            return
+          }
+        } catch (e2) {
+          // fall through to /api/source
+        }
+      }
+      // Fallback to internal XML/Pinecone content if proxy not available
       const res = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, slug }) })
       const json = await res.json()
       if (json?.success && json?.data?.html) {
-          const main = extractMainContent(json.data.html)
-          setViewerHtml(main)
+        const main = extractMainContent(json.data.html)
+        setViewerHtml(main)
         return
       }
-    } catch (e) {
-      // swallow and try proxy next
-    }
-    if (url) {
-      try {
-        const res2 = await fetch('/api/proxy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
-        const json2 = await res2.json()
-        if (json2?.success && json2?.data?.html) {
-          const main2 = extractMainContent(json2.data.html)
-          setViewerHtml(main2)
-        } else {
-          setViewerHtml('<p style="padding:12px">Unable to load content. </p>')
-        }
-      } catch (e2) {
-        setViewerHtml('<p style="padding:12px">Failed to load content. </p>')
+      // Last fallback: if we have a URL but proxy failed earlier, show a link
+      if (url) {
+        setViewerHtml(`<article><p>Could not render this page here. <a href="${url}" target="_blank" rel="noopener noreferrer">Open in new tab</a>.</p></article>`)
+        return
       }
-    } else {
       setViewerHtml('<p style="padding:12px">Content unavailable.</p>')
+    } catch (e) {
+      setViewerHtml('<p style="padding:12px">Failed to load content.</p>')
     }
   }
 
