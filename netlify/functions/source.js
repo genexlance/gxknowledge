@@ -86,8 +86,10 @@ async function tryLoadFromPinecone({ parentId, slug }) {
     const group = matches.filter(m => (m.metadata?.parentId || pid) === pid)
     group.sort((a,b)=> (a.metadata?.chunkIndex||0) - (b.metadata?.chunkIndex||0))
     const title = group[0]?.metadata?.title || 'Untitled'
-    const htmlBody = group.map(m => escapeHtmlBlock(m.metadata?.content || '')).join('\n\n')
-    return { title, html: wrapArticle(title, `<pre>${htmlBody}</pre>`) }
+    const htmlBody = group
+      .map(m => `<p>${escapeHtmlBlock(m.metadata?.content || '')}</p>`)
+      .join('\n')
+    return { title, html: wrapArticle(title, htmlBody) }
   } catch {
     return null
   }

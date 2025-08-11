@@ -250,13 +250,18 @@ html::after {
   width: 100%;
   color: #d0d0d0;
 }
+.modal, .modal * {
+  font-family: 'Geist', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
 .modal-html article {
   max-width: 900px;
   margin: 0 auto;
   line-height: 1.7;
   font-size: 1rem;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
+  white-space: normal;
 }
 .modal-html * { max-width: 100%; }
 .modal-html h1, .modal-html h2, .modal-html h3, .modal-html h4, .modal-html h5, .modal-html h6 {
